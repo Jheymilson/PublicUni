@@ -24,6 +24,10 @@ class RoundRobinSimulator:
         self.process_status = []
         self.waiting_times = {}
         self.turnaround_times = {}
+        # Track execution rounds for each process
+        self.process_execution_count = {}
+        # Track if second round has started
+        self.second_round_started = False
     
     def add_process(self, process_id, arrival_time, burst_time):
         """
@@ -48,6 +52,9 @@ class RoundRobinSimulator:
         
         # Concatenar el nuevo proceso al DataFrame de procesos
         self.processes = pd.concat([self.processes, new_process], ignore_index=True)
+        
+        # Initialize execution count for this process
+        self.process_execution_count[process_id] = 0
         
         # Ordenar los procesos por tiempo de llegada
         self.processes = self.processes.sort_values(by=['arrival_time', 'process_id']).reset_index(drop=True)
@@ -89,7 +96,7 @@ class RoundRobinSimulator:
             visualize (bool): Si es True, muestra la simulación visualmente
             step_by_step (bool): Si es True, espera entrada del usuario entre pasos
             delay (float): Tiempo de espera entre pasos si step_by_step es False
-        """sssssssssssssssssssssssssssssssssss
+        """
         self.execution_sequence = []
         self.gantt_data = []
         self.process_status = []
@@ -99,7 +106,12 @@ class RoundRobinSimulator:
         # Inicializar el tiempo restante para cada proceso
         self.processes['remaining_time'] = self.processes['burst_time']
         self.processes['state'] = 'NEW'
-        self.processes['first_response'] = -
+        self.processes['first_response'] = -1
+        
+        # Reset execution tracking
+        for process_id in self.process_execution_count.keys():
+            self.process_execution_count[process_id] = 0
+        self.second_round_started = False
         
         # Función auxiliar para agregar procesos que han llegado
         def add_arrived_processes():
@@ -157,6 +169,40 @@ class RoundRobinSimulator:
             
             # Actualizar el estado del proceso a RUNNING
             self.processes.loc[current_process_idx, 'state'] = 'RUNNING'
+            
+            # Track execution count for this process
+            self.process_execution_count[current_process_id] += 1
+            
+            # Check if second round should start (all processes have executed at least once)
+            if not self.second_round_started:
+                all_processes_executed = all(count >= 1 for count in self.process_execution_count.values())
+                if all_processes_executed and any(count >= 2 for count in self.process_execution_count.values()):
+                    self.second_round_started = True
+                    # Add 5ms printing delay for second round
+                    print_start_time = self.current_time
+                    print_end_time = self.current_time + 5
+                    self.execution_sequence.append(('PRINT_5ms', print_start_time, print_end_time))
+                    self.gantt_data.append({
+                        'process': 'PRINT_5ms',
+                        'start': print_start_time,
+                        'end': print_end_time
+                    })
+                    self.current_time = print_end_time
+                    print(f"  Second round printing event: {print_start_time}ms -> {print_end_time}ms (5ms delay)")
+            
+            # Check for P3 first execution printing event
+            if current_process_id == 'P3' and self.process_execution_count[current_process_id] == 1:
+                # Add 2ms printing delay for P3 first execution
+                print_start_time = self.current_time
+                print_end_time = self.current_time + 2
+                self.execution_sequence.append(('PRINT_P3_2ms', print_start_time, print_end_time))
+                self.gantt_data.append({
+                    'process': 'PRINT_P3_2ms',
+                    'start': print_start_time,
+                    'end': print_end_time
+                })
+                self.current_time = print_end_time
+                print(f"  P3 first execution printing event: {print_start_time}ms -> {print_end_time}ms (2ms delay)")
             
             # Determinar cuánto tiempo se ejecutará este proceso
             remaining = self.processes.loc[current_process_idx, 'remaining_time']
